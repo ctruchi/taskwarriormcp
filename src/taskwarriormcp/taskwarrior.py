@@ -11,7 +11,18 @@ from .exceptions import (
     TaskWarriorNotFoundError,
     TaskWarriorParseError,
     TaskWarriorSyncError,
+    TaskWarriorValidationError,
 )
+from .metrics import get_metrics_collector
+from .logging_config import get_logger, sanitize_command
+from .validation import (
+    validate_add_task_params,
+    validate_edit_task_params,
+    validate_list_project_tasks_params,
+    ValidationError,
+)
+
+logger = get_logger(__name__)
 
 
 class TaskWarriorWrapper:
@@ -24,6 +35,8 @@ class TaskWarriorWrapper:
             config: Configuration instance
         """
         self.config = config
+        self.metrics = get_metrics_collector()
+        logger.debug(f"TaskWarriorWrapper initialized with task_command: {config.task_command}")
 
     def _run_command(self, args: list[str]) -> str:
         """Execute task command and return stdout.
@@ -42,6 +55,10 @@ class TaskWarriorWrapper:
         cmd_parts = shlex.split(self.config.task_command)
         full_command = cmd_parts + args
 
+        # Sanitize command for logging
+        sanitized_cmd = sanitize_command(full_command)
+        logger.debug(f"Executing command: {sanitized_cmd}")
+
         try:
             result = subprocess.run(
                 full_command,
@@ -49,14 +66,18 @@ class TaskWarriorWrapper:
                 text=True,
                 check=True
             )
+            logger.debug(f"Command completed successfully, stdout length: {len(result.stdout)} bytes")
             return result.stdout
         except FileNotFoundError as e:
+            logger.error(f"Task command not found: {self.config.task_command}", exc_info=True)
             raise TaskWarriorNotFoundError(
                 f"Task command not found: {self.config.task_command}"
             ) from e
         except subprocess.CalledProcessError as e:
+            error_msg = e.stderr or e.stdout
+            logger.error(f"Command failed with return code {e.returncode}: {error_msg}", exc_info=True)
             raise TaskWarriorCommandError(
-                f"Task command failed: {e.stderr or e.stdout}"
+                f"Task command failed: {error_msg}"
             ) from e
 
     def _sync(self) -> None:
@@ -67,10 +88,14 @@ class TaskWarriorWrapper:
         Raises:
             TaskWarriorSyncError: If sync command failed
         """
-        try:
-            self._run_command(["sync"])
-        except TaskWarriorCommandError as e:
-            raise TaskWarriorSyncError(f"Sync failed: {e}") from e
+        logger.info("Starting task sync operation")
+        with self.metrics.track_sync():
+            try:
+                self._run_command(["sync"])
+                logger.info("Task sync completed successfully")
+            except TaskWarriorCommandError as e:
+                logger.error(f"Task sync failed: {str(e)}", exc_info=True)
+                raise TaskWarriorSyncError(f"Sync failed: {e}") from e
 
     def _with_sync(self, operation_func: Callable[[], Any], modifies_data: bool = False) -> Any:
         """Execute operation with sync wrapper.
@@ -114,20 +139,28 @@ class TaskWarriorWrapper:
             TaskWarriorParseError: If JSON parsing failed
         """
         if not output or not output.strip():
+            logger.debug("Empty output received, returning empty list")
             return []
 
+        logger.debug(f"Parsing JSON output, length: {len(output)} bytes")
         try:
             # Try parsing as JSON array first
             data = json.loads(output)
             if isinstance(data, list):
+                logger.debug(f"Successfully parsed JSON array with {len(data)} items")
                 return data
+            logger.debug("Successfully parsed single JSON object, wrapping in list")
             return [data]
         except json.JSONDecodeError:
             # Try line-delimited JSON
+            logger.debug("JSON array parsing failed, trying line-delimited JSON")
             try:
                 lines = [line.strip() for line in output.strip().split('\n') if line.strip()]
-                return [json.loads(line) for line in lines]
+                result = [json.loads(line) for line in lines]
+                logger.debug(f"Successfully parsed line-delimited JSON with {len(result)} items")
+                return result
             except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON output: {e}", exc_info=True)
                 raise TaskWarriorParseError(f"Failed to parse JSON output: {e}") from e
 
     def list_tasks(self) -> list[dict[str, Any]]:
@@ -136,9 +169,12 @@ class TaskWarriorWrapper:
         Returns:
             List of task dictionaries
         """
+        logger.debug("list_tasks operation starting")
         def _list():
             output = self._run_command(["export"])
-            return self._parse_json_output(output)
+            tasks = self._parse_json_output(output)
+            logger.info(f"list_tasks retrieved {len(tasks)} tasks")
+            return tasks
 
         return self._with_sync(_list, modifies_data=False)
 
@@ -161,7 +197,31 @@ class TaskWarriorWrapper:
 
         Returns:
             Task dictionary
+
+        Raises:
+            TaskWarriorValidationError: If input validation fails
         """
+        # Validate all inputs
+        try:
+            validated = validate_add_task_params(
+                description=description,
+                project=project,
+                priority=priority,
+                due=due,
+                tags=tags
+            )
+            logger.debug(f"Validated add_task parameters: {sanitize_command(str(validated))}")
+        except ValidationError as e:
+            logger.error(f"Validation failed for add_task: {e}")
+            raise TaskWarriorValidationError(str(e)) from e
+
+        # Use validated values
+        description = validated['description']
+        project = validated.get('project')
+        priority = validated.get('priority')
+        due = validated.get('due')
+        tags = validated.get('tags')
+
         def _add():
             args = ["add", shlex.quote(description)]
 
@@ -175,6 +235,7 @@ class TaskWarriorWrapper:
                 for tag in tags:
                     args.append(f"+{shlex.quote(tag)}")
 
+            logger.info(f"Executing add_task command with {len(args)} arguments")
             output = self._run_command(args)
 
             # Parse output to extract UUID
@@ -212,7 +273,33 @@ class TaskWarriorWrapper:
 
         Returns:
             Updated task dictionary
+
+        Raises:
+            TaskWarriorValidationError: If input validation fails
         """
+        # Validate all inputs
+        try:
+            validated = validate_edit_task_params(
+                task_id=task_id,
+                description=description,
+                project=project,
+                priority=priority,
+                due=due,
+                tags=tags
+            )
+            logger.debug(f"Validated edit_task parameters: {sanitize_command(str(validated))}")
+        except ValidationError as e:
+            logger.error(f"Validation failed for edit_task: {e}")
+            raise TaskWarriorValidationError(str(e)) from e
+
+        # Use validated values
+        task_id = validated['task_id']
+        description = validated.get('description')
+        project = validated.get('project')
+        priority = validated.get('priority')
+        due = validated.get('due')
+        tags = validated.get('tags')
+
         def _edit():
             args = [task_id, "modify"]
 
@@ -228,13 +315,16 @@ class TaskWarriorWrapper:
                 for tag in tags:
                     args.append(f"+{shlex.quote(tag)}")
 
+            logger.info(f"Executing edit_task command for task {task_id} with {len(args)} arguments")
             self._run_command(args)
 
             # Export the modified task
             output = self._run_command([task_id, "export"])
             tasks = self._parse_json_output(output)
             if not tasks:
+                logger.error(f"Failed to retrieve task {task_id} after modification")
                 raise TaskWarriorCommandError(f"Failed to retrieve task {task_id}")
+            logger.info(f"Successfully edited task {task_id}")
             return tasks[0]
 
         return self._with_sync(_edit, modifies_data=True)
@@ -247,9 +337,23 @@ class TaskWarriorWrapper:
 
         Returns:
             List of task dictionaries
+
+        Raises:
+            TaskWarriorValidationError: If input validation fails
         """
+        # Validate project name
+        try:
+            project = validate_list_project_tasks_params(project)
+            logger.debug(f"Validated list_project_tasks parameters: project={project}")
+        except ValidationError as e:
+            logger.error(f"Validation failed for list_project_tasks: {e}")
+            raise TaskWarriorValidationError(str(e)) from e
+
         def _list():
+            logger.info(f"Listing tasks for project: {project}")
             output = self._run_command([f"project:{project}", "export"])
-            return self._parse_json_output(output)
+            tasks = self._parse_json_output(output)
+            logger.info(f"Retrieved {len(tasks)} tasks for project {project}")
+            return tasks
 
         return self._with_sync(_list, modifies_data=False)

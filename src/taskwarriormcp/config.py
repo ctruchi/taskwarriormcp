@@ -3,6 +3,12 @@
 import os
 from dataclasses import dataclass
 
+from .logging_config import get_logger
+from .validation import validate_task_command, ValidationError
+from .exceptions import TaskWarriorValidationError
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class Config:
@@ -18,13 +24,18 @@ class Config:
             Config: Configuration instance
         """
         task_command = os.environ.get("TASK_COMMAND", "task")
+        logger.debug(f"Loaded TASK_COMMAND from environment: {task_command}")
         return cls(task_command=task_command)
 
     def validate(self) -> None:
         """Validate configuration.
 
         Raises:
-            ValueError: If configuration is invalid
+            TaskWarriorValidationError: If configuration is invalid
         """
-        if not self.task_command or not self.task_command.strip():
-            raise ValueError("TASK_COMMAND cannot be empty")
+        try:
+            self.task_command = validate_task_command(self.task_command)
+            logger.info(f"Configuration validated successfully: task_command={self.task_command}")
+        except ValidationError as e:
+            logger.error(f"TASK_COMMAND validation failed: {e}")
+            raise TaskWarriorValidationError(str(e)) from e
