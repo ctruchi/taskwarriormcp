@@ -43,3 +43,9 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+# Docker
+credentials/
+config/.taskrc
+*.env
+.env.*

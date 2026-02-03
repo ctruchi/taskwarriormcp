@@ -9,8 +9,10 @@ TaskWarrior MCP is a Python implementation of a Model Context Protocol (MCP) ser
 ## Architecture
 
 ```
-src/        # Source code for the MCP server and TaskWarrior wrapper
-Dockerfile  # Docker container for the MCP server and taskwarrior
+src/                # Source code for the MCP server and TaskWarrior wrapper
+Dockerfile          # Production Docker container (Fedora 41, TaskWarrior 3.4.1, ~294MB)
+DOCKER.md           # Comprehensive Docker deployment guide
+config/             # Configuration templates (.taskrc.example)
 ```
 
 ### MCP Server
@@ -20,7 +22,15 @@ Dockerfile  # Docker container for the MCP server and taskwarrior
   - **After** each command that modifies tasks
 
 ### Docker Container
-- The Dockerfile packages both the MCP server and TaskWarrior binary
+- Production-ready Dockerfile based on Fedora 41
+- Includes TaskWarrior 3.4.1 from official Fedora repositories
+- Includes Python 3.13 with MCP server and dependencies
+- Security features:
+  - Runs as non-root user (UID 1000)
+  - Supports read-only filesystem
+  - No new privileges flag
+  - Health checks included
+  - Tini for proper signal handling
 - Required environment variables:
   - `SYNC_GCP_BUCKET`: GCP bucket name for task synchronization
   - `SYNC_GCP_CREDENTIAL_PATH`: Path to GCP credentials file

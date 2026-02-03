@@ -159,12 +159,62 @@ taskwarriormcp/
 
 ## Docker
 
-The Dockerfile packages the MCP server with TaskWarrior embedded.
+A production-ready Dockerfile is provided that packages both the MCP server and TaskWarrior (v3.2.0) in a lightweight, secure container.
+
+### Building the Docker Image
+
+```bash
+# Build the image
+docker build -t taskwarrior-mcp:latest .
+
+# The image includes:
+# - Fedora 41 base
+# - TaskWarrior 3.4.1 (from package manager)
+# - Python 3.13 with MCP server
+# - Final image size: ~294MB
+```
+
+### Running with Docker
+
+```bash
+# Run the container
+docker run -d \
+  --name taskwarrior-mcp \
+  -e SYNC_GCP_BUCKET=your-bucket-name \
+  -e SYNC_GCP_CREDENTIAL_PATH=/credentials/gcp-credentials.json \
+  -e LOG_LEVEL=INFO \
+  -v taskwarrior-data:/data/taskwarrior \
+  -v $(pwd)/config/.taskrc:/config/.taskrc:ro \
+  -v $(pwd)/credentials/gcp-credentials.json:/credentials/gcp-credentials.json:ro \
+  --read-only \
+  --tmpfs /tmp \
+  --security-opt no-new-privileges:true \
+  taskwarrior-mcp:latest
+
+# View logs
+docker logs -f taskwarrior-mcp
+```
 
 ### Environment Variables (Docker)
 
 - `SYNC_GCP_BUCKET`: GCP bucket name for task synchronization
-- `SYNC_GCP_CREDENTIAL_PATH`: Path to GCP credentials file
+- `SYNC_GCP_CREDENTIAL_PATH`: Path to GCP credentials file (inside container)
+- `LOG_LEVEL`: Logging level (default: INFO)
+- `TASKRC`: Path to TaskWarrior config file (default: /config/.taskrc)
+- `TASKDATA`: Path to TaskWarrior data directory (default: /data/taskwarrior)
+
+### Security Features
+
+The Docker image implements security best practices:
+
+- **Non-root user**: Runs as user ID 1000
+- **Read-only filesystem**: Container root filesystem is read-only
+- **No new privileges**: Security option prevents privilege escalation
+- **Minimal packages**: Only essential packages installed
+- **Resource limits**: Can be configured with docker run --cpus and --memory flags
+- **Health checks**: Automatic container health monitoring
+- **Signal handling**: Proper shutdown with tini init system
+- **Latest TaskWarrior**: v3.4.1 from Fedora repositories
 
 ## Input Validation
 
