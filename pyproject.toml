@@ -1,0 +1,30 @@
+[project]
+name = "taskwarriormcp"
+version = "0.1.0"
+description = "Model Context Protocol server for TaskWarrior"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+taskwarriormcp = "taskwarriormcp.server:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests requiring Docker/TaskWarrior",
+]
