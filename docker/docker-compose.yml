@@ -1,0 +1,8 @@
+services:
+  taskwarrior:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data/taskwarrior:/data
+      - ./config/taskwarrior:/config
