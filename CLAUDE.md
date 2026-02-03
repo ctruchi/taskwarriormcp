@@ -50,12 +50,49 @@ The codebase consists of the following key components:
    - The MCP server doesn't directly interact with GCP - it delegates to TaskWarrior
 
 4. **Configuration** (`src/taskwarriormcp/config.py`)
-   - Environment variable: `TASK_COMMAND` (default: "task")
+   - Environment variables:
+     - `TASK_COMMAND` (default: "task"): TaskWarrior command to execute
+     - `LOG_LEVEL` (default: "INFO"): Logging verbosity level
    - Supports both local TaskWarrior and Docker-based setups
 
 5. **Error Handling** (`src/taskwarriormcp/exceptions.py`)
    - Custom exception hierarchy for TaskWarrior operations
-   - Includes: `TaskWarriorError`, `TaskWarriorCommandError`, `TaskWarriorNotFoundError`, `TaskWarriorParseError`, `TaskWarriorSyncError`
+   - Includes: `TaskWarriorError`, `TaskWarriorCommandError`, `TaskWarriorNotFoundError`, `TaskWarriorParseError`, `TaskWarriorSyncError`, `TaskWarriorValidationError`
+
+6. **Input Validation** (`src/taskwarriormcp/validation.py`)
+   - Uses Pydantic for structured validation
+   - Validates all inputs before execution to prevent injection attacks and ensure data integrity
+   - Key validators:
+     - `TaskDescriptionValidator`: Max 1000 chars, no control chars, shell injection protection
+     - `PriorityValidator`: Must be H/M/L (case-insensitive)
+     - `TaskIdValidator`: UUID or numeric ID format
+     - `ProjectNameValidator`: Max 100 chars, alphanumeric + underscore/hyphen/period
+     - `TagValidator`: Max 50 chars per tag, alphanumeric + underscore/hyphen/period
+     - `DueDateValidator`: ISO dates or TaskWarrior relative dates
+     - `TaskCommandValidator`: Must contain 'task', injection protection
+   - Convenience functions: `validate_add_task_params()`, `validate_edit_task_params()`, `validate_list_project_tasks_params()`, `validate_task_command()`
+   - Validation is performed in both `taskwarrior.py` methods and can be used independently
+   - All validation errors raise `TaskWarriorValidationError` with descriptive messages
+
+7. **Logging** (`src/taskwarriormcp/logging_config.py`)
+   - Comprehensive logging system using Python's standard `logging` module
+   - Configurable via `LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+   - Default format: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+   - Logs to stderr for compatibility with MCP protocol
+   - Key features:
+     - `setup_logging()`: Initializes logging configuration on server startup
+     - `get_logger(name)`: Returns logger instance for a module
+     - `sanitize_for_logging(data, max_length)`: Truncates long strings for safe logging
+     - `sanitize_command(command)`: Sanitizes command lists before logging
+   - What gets logged:
+     - Server initialization and shutdown
+     - All tool invocations with sanitized parameters
+     - Command executions with sanitized arguments
+     - Sync operations (start, success, failure)
+     - Subprocess errors with return codes
+     - JSON parsing operations
+     - Configuration loading and validation
+   - Security: Task descriptions truncated to 50 chars, no credentials logged
 
 ## Development Workflow
 
@@ -89,6 +126,10 @@ python -m taskwarriormcp.server
 # Docker-based TaskWarrior
 export TASK_COMMAND="docker compose -f docker/docker-compose.yml run --rm taskwarrior"
 python -m taskwarriormcp.server
+
+# With custom log level
+export LOG_LEVEL="DEBUG"
+python -m taskwarriormcp.server
 ```
 
 ### Testing
@@ -107,6 +148,9 @@ pytest src/tests/test_integration.py -v -m integration
 
 # Run all tests
 pytest src/tests/ -v
+
+# Run only validation tests
+pytest src/tests/test_validation.py -v
 ```
 
 ### MCP Tools
@@ -122,3 +166,4 @@ All MCP tools automatically sync before and after operations:
 
 - Always update the README.md file with relevant information about the project
 - Always update the CLAUDE.md file with relevant information about the project
+- NEVER add "Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>" or similar co-author attribution to git commit messages

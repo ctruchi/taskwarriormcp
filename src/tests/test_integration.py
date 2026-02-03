@@ -44,11 +44,13 @@ def test_config_from_env():
 
 def test_config_validation():
     """Test configuration validation."""
+    from taskwarriormcp.exceptions import TaskWarriorValidationError
+
     config = Config(task_command="task")
     config.validate()  # Should not raise
 
     config = Config(task_command="")
-    with pytest.raises(ValueError):
+    with pytest.raises(TaskWarriorValidationError):
         config.validate()
 
 

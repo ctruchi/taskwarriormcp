@@ -24,3 +24,8 @@ class TaskWarriorParseError(TaskWarriorError):
 class TaskWarriorSyncError(TaskWarriorError):
     """Task sync command failed."""
     pass
+
+
+class TaskWarriorValidationError(TaskWarriorError):
+    """Input validation failed."""
+    pass
