@@ -45,6 +45,18 @@ pip install -e ".[dev]"
 - `LOG_LEVEL` - Logging level (default: `"INFO"`)
   - Valid levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
+### OAuth 2.0 Configuration (Optional)
+
+Enable OAuth 2.0 authentication with Dynamic Client Registration (RFC 7591):
+
+- `OAUTH_ENABLED` - Enable OAuth authentication (default: `"false"`)
+- `OAUTH_ISSUER_URL` - OAuth issuer URL (default: `"http://localhost:8000"`)
+- `OAUTH_AUTH_CODE_LIFETIME` - Authorization code lifetime in seconds (default: `600`)
+- `OAUTH_ACCESS_TOKEN_LIFETIME` - Access token lifetime in seconds (default: `3600`)
+- `OAUTH_REFRESH_TOKEN_LIFETIME` - Refresh token lifetime in seconds (default: `2592000` = 30 days)
+- `OAUTH_DYNAMIC_REGISTRATION` - Enable dynamic client registration (default: `"true"`)
+- `OAUTH_REVOCATION_ENABLED` - Enable token revocation (default: `"true"`)
+
 ### TaskWarrior Sync Configuration
 
 TaskWarrior handles GCP sync through its `.taskrc` configuration file. The MCP server calls `task sync` before and after operations, and TaskWarrior manages the GCP connection.
@@ -147,11 +159,17 @@ taskwarriormcp/
 │   │   ├── exceptions.py     # Custom exceptions
 │   │   ├── validation.py     # Input validation using Pydantic
 │   │   ├── logging_config.py # Logging configuration and utilities
-│   │   └── metrics.py        # Metrics collection
+│   │   ├── metrics.py        # Metrics collection
+│   │   └── oauth/            # OAuth 2.0 implementation
+│   │       ├── __init__.py   # OAuth module exports
+│   │       ├── config.py     # OAuth configuration
+│   │       ├── storage.py    # In-memory token storage
+│   │       └── provider.py   # OAuth provider implementation
 │   └── tests/
 │       ├── test_taskwarrior.py   # Unit tests
 │       ├── test_integration.py   # Integration tests
-│       └── test_validation.py    # Validation tests
+│       ├── test_validation.py    # Validation tests
+│       └── test_oauth.py         # OAuth tests
 ├── docker/                   # Docker setup
 ├── pyproject.toml           # Project configuration
 └── README.md
@@ -312,6 +330,51 @@ Logging is designed to avoid exposing sensitive information:
 2026-02-03 17:35:12 - taskwarriormcp.taskwarrior - INFO - Executing add_task command with 6 arguments
 2026-02-03 17:35:13 - taskwarriormcp.server - INFO - add_task completed successfully: created task ID 42
 ```
+
+## OAuth 2.0 Authentication
+
+The TaskWarrior MCP server supports optional OAuth 2.0 authentication with Dynamic Client Registration (RFC 7591) per the MCP specification.
+
+### Enabling OAuth
+
+```bash
+# Enable OAuth
+export OAUTH_ENABLED=true
+export OAUTH_ISSUER_URL=http://localhost:8000
+
+# Start the server
+python -m taskwarriormcp.server
+```
+
+### OAuth Endpoints
+
+When OAuth is enabled, the following endpoints are available:
+
+- `GET /.well-known/oauth-authorization-server` - OAuth metadata
+- `POST /register` - Dynamic client registration
+- `GET /authorize` - Authorization endpoint
+- `POST /token` - Token endpoint
+- `POST /revoke` - Token revocation endpoint
+
+### Manual Testing
+
+```bash
+# Check OAuth metadata
+curl http://localhost:8000/.well-known/oauth-authorization-server
+
+# Register a client
+curl -X POST http://localhost:8000/register \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris": ["http://localhost:3000/callback"], "client_name": "Test Client"}'
+```
+
+### Security Considerations
+
+- **HTTPS Required**: For production, redirect URIs must use HTTPS (except localhost)
+- **Token Security**: Uses 256-bit entropy for tokens (secrets.token_urlsafe(32))
+- **PKCE Required**: MCP SDK enforces PKCE with S256 method
+- **Token Rotation**: Refresh tokens are rotated on each use
+- **In-Memory Storage**: Tokens are stored in memory and lost on restart (for production, implement persistent storage)
 
 ## Task Syncing
 

@@ -29,3 +29,18 @@ class TaskWarriorSyncError(TaskWarriorError):
 class TaskWarriorValidationError(TaskWarriorError):
     """Input validation failed."""
     pass
+
+
+class TaskWarriorOAuthError(TaskWarriorError):
+    """Base exception for OAuth operations."""
+    pass
+
+
+class TaskWarriorAuthenticationError(TaskWarriorOAuthError):
+    """Authentication failed (invalid or missing credentials)."""
+    pass
+
+
+class TaskWarriorAuthorizationError(TaskWarriorOAuthError):
+    """Authorization failed (insufficient permissions)."""
+    pass

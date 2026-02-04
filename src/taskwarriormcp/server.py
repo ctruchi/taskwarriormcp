@@ -4,25 +4,81 @@ import json
 from typing import Any
 
 from mcp.server import FastMCP
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 
 from .config import Config
 from .taskwarrior import TaskWarriorWrapper
 from .exceptions import TaskWarriorError
 from .logging_config import setup_logging, get_logger, sanitize_for_logging
 from .metrics import get_metrics_collector
+from .oauth import InMemoryStorage, OAuthConfig, TaskWarriorOAuthProvider
 
 # Setup logging first
 setup_logging()
 logger = get_logger(__name__)
 
-# Initialize FastMCP server
-logger.info("Initializing TaskWarrior MCP server")
-mcp = FastMCP("taskwarrior")
 
-# Initialize configuration and TaskWarrior wrapper
+def create_mcp_server(config: Config) -> FastMCP:
+    """Create and configure a FastMCP server instance.
+
+    Args:
+        config: Server configuration
+
+    Returns:
+        Configured FastMCP server instance
+    """
+    if config.oauth.enabled:
+        logger.info("OAuth is enabled, configuring authentication")
+
+        # Warn about non-HTTPS for non-localhost
+        if not config.oauth.is_https and not config.oauth.is_localhost:
+            logger.warning(
+                "OAuth issuer URL is not HTTPS. This is insecure for production use. "
+                f"Current value: {config.oauth.issuer_url}"
+            )
+
+        # Create OAuth components
+        storage = InMemoryStorage()
+        oauth_provider = TaskWarriorOAuthProvider(storage, config.oauth)
+
+        # Create auth settings
+        auth_settings = AuthSettings(
+            issuer_url=config.oauth.issuer_url,
+            resource_server_url=config.oauth.issuer_url,
+            client_registration_options=ClientRegistrationOptions(
+                enabled=config.oauth.dynamic_registration,
+            ),
+            revocation_options=RevocationOptions(
+                enabled=config.oauth.revocation_enabled,
+            ),
+        )
+
+        logger.info(
+            f"OAuth configured: issuer_url={config.oauth.issuer_url}, "
+            f"dynamic_registration={config.oauth.dynamic_registration}, "
+            f"revocation={config.oauth.revocation_enabled}"
+        )
+
+        return FastMCP(
+            "taskwarrior",
+            auth=auth_settings,
+            auth_server_provider=oauth_provider,
+        )
+    else:
+        logger.info("OAuth is disabled, creating server without authentication")
+        return FastMCP("taskwarrior")
+
+
+# Initialize configuration
 logger.debug("Loading configuration from environment")
 config = Config.from_env()
 config.validate()
+
+# Initialize FastMCP server
+logger.info("Initializing TaskWarrior MCP server")
+mcp = create_mcp_server(config)
+
+# Initialize TaskWarrior wrapper and metrics
 tw = TaskWarriorWrapper(config)
 metrics = get_metrics_collector()
 logger.info("TaskWarrior MCP server initialized successfully")

@@ -1,11 +1,12 @@
 """Configuration management for TaskWarrior MCP server."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .logging_config import get_logger
 from .validation import validate_task_command, ValidationError
 from .exceptions import TaskWarriorValidationError
+from .oauth.config import OAuthConfig
 
 logger = get_logger(__name__)
 
@@ -15,6 +16,7 @@ class Config:
     """Configuration for TaskWarrior MCP server."""
 
     task_command: str
+    oauth: OAuthConfig = field(default_factory=lambda: OAuthConfig.from_env())
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -25,7 +27,10 @@ class Config:
         """
         task_command = os.environ.get("TASK_COMMAND", "task")
         logger.debug(f"Loaded TASK_COMMAND from environment: {task_command}")
-        return cls(task_command=task_command)
+
+        oauth = OAuthConfig.from_env()
+
+        return cls(task_command=task_command, oauth=oauth)
 
     def validate(self) -> None:
         """Validate configuration.
@@ -39,3 +44,6 @@ class Config:
         except ValidationError as e:
             logger.error(f"TASK_COMMAND validation failed: {e}")
             raise TaskWarriorValidationError(str(e)) from e
+
+        # Validate OAuth configuration
+        self.oauth.validate()

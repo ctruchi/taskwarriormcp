@@ -68,6 +68,7 @@ The codebase consists of the following key components:
 5. **Error Handling** (`src/taskwarriormcp/exceptions.py`)
    - Custom exception hierarchy for TaskWarrior operations
    - Includes: `TaskWarriorError`, `TaskWarriorCommandError`, `TaskWarriorNotFoundError`, `TaskWarriorParseError`, `TaskWarriorSyncError`, `TaskWarriorValidationError`
+   - OAuth exceptions: `TaskWarriorOAuthError`, `TaskWarriorAuthenticationError`, `TaskWarriorAuthorizationError`
 
 6. **Input Validation** (`src/taskwarriormcp/validation.py`)
    - Uses Pydantic for structured validation
@@ -103,6 +104,34 @@ The codebase consists of the following key components:
      - JSON parsing operations
      - Configuration loading and validation
    - Security: Task descriptions truncated to 50 chars, no credentials logged
+
+8. **OAuth 2.0 Authentication** (`src/taskwarriormcp/oauth/`)
+   - Implements OAuth 2.0 Dynamic Client Registration (RFC 7591) per MCP specification
+   - Uses the MCP SDK's `OAuthAuthorizationServerProvider` protocol
+   - Components:
+     - `config.py`: OAuth configuration from environment variables
+     - `storage.py`: Thread-safe in-memory storage for OAuth data
+     - `provider.py`: Full OAuth provider implementation
+   - Features:
+     - Dynamic client registration with redirect URI validation
+     - Authorization code flow with PKCE (enforced by MCP SDK)
+     - Token issuance with configurable lifetimes
+     - Refresh token rotation for security
+     - Token revocation (access and refresh tokens)
+   - Environment variables:
+     - `OAUTH_ENABLED`: Enable OAuth (default: false)
+     - `OAUTH_ISSUER_URL`: OAuth issuer URL (default: http://localhost:8000)
+     - `OAUTH_AUTH_CODE_LIFETIME`: Auth code lifetime in seconds (default: 600)
+     - `OAUTH_ACCESS_TOKEN_LIFETIME`: Access token lifetime in seconds (default: 3600)
+     - `OAUTH_REFRESH_TOKEN_LIFETIME`: Refresh token lifetime in seconds (default: 2592000)
+     - `OAUTH_DYNAMIC_REGISTRATION`: Enable dynamic registration (default: true)
+     - `OAUTH_REVOCATION_ENABLED`: Enable token revocation (default: true)
+   - Security:
+     - 256-bit entropy tokens (secrets.token_urlsafe(32))
+     - HTTPS required for non-localhost redirect URIs
+     - Automatic token expiration handling
+     - Thread-safe storage with locks
+   - Note: In-memory storage is ephemeral; for production, implement persistent storage
 
 ## Development Workflow
 
@@ -161,6 +190,9 @@ pytest src/tests/ -v
 
 # Run only validation tests
 pytest src/tests/test_validation.py -v
+
+# Run only OAuth tests
+pytest src/tests/test_oauth.py -v
 ```
 
 ### MCP Tools
@@ -171,6 +203,22 @@ All MCP tools automatically sync before and after operations:
 2. **add_task(description, project?, priority?, due?, tags?)** - Creates a new task
 3. **edit_task(task_id, description?, project?, priority?, due?, tags?)** - Modifies an existing task
 4. **list_project_tasks(project)** - Returns tasks filtered by project
+
+### Running with OAuth Enabled
+
+```bash
+# Enable OAuth authentication
+export OAUTH_ENABLED=true
+export OAUTH_ISSUER_URL=http://localhost:8000
+python -m taskwarriormcp.server
+
+# OAuth endpoints are automatically available:
+# - GET  /.well-known/oauth-authorization-server
+# - POST /register
+# - GET  /authorize
+# - POST /token
+# - POST /revoke
+```
 
 ## Rules
 
