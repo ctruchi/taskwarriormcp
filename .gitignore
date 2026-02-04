@@ -1,5 +1,6 @@
 .idea
 docker/data
+docker/config/taskwarrior/
 
 # Python artifacts
 __pycache__/
