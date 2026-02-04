@@ -47,6 +47,11 @@ jobs:
       run: |
         echo '${{ secrets.SYNC_GCP_CREDENTIAL }}' > docker/config/taskwarrior/gcp_credential.json
 
+    - name: Create data directory with correct permissions
+      run: |
+        mkdir -p docker/data/taskwarrior
+        chmod 777 docker/data/taskwarrior
+
     - name: Run tests
       env:
         TASK_COMMAND: docker compose -f docker/docker-compose.yml run --rm taskwarrior
