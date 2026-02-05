@@ -62,7 +62,6 @@ The codebase consists of the following key components:
 4. **Configuration** (`src/taskwarriormcp/config.py`)
    - Environment variables:
      - `TASK_COMMAND` (default: "task"): TaskWarrior command to execute
-     - `LOG_LEVEL` (default: "INFO"): Logging verbosity level
      - `MCP_TRANSPORT` (default: "stdio"): Transport protocol - `stdio`, `sse`, or `streamable-http`
      - `MCP_HOST` (default: "127.0.0.1"): Host address to bind to (use "0.0.0.0" for Docker)
      - `MCP_PORT` (default: "8000"): Port number for SSE/HTTP transport
@@ -92,13 +91,14 @@ The codebase consists of the following key components:
    - Validation is performed in both `taskwarrior.py` methods and can be used independently
    - All validation errors raise `TaskWarriorValidationError` with descriptive messages
 
-7. **Logging** (`src/taskwarriormcp/logging_config.py`)
+7. **Logging** (`src/taskwarriormcp/logging.ini` and `src/taskwarriormcp/logging_config.py`)
    - Comprehensive logging system using Python's standard `logging` module
-   - Configurable via `LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+   - Configuration loaded from `logging.ini` file using `logging.config.fileConfig()`
+   - Edit `logging.ini` directly to change log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
    - Default format: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
    - Logs to stderr for compatibility with MCP protocol
    - Key features:
-     - `setup_logging()`: Initializes logging configuration on server startup
+     - `setup_logging()`: Loads logging.ini configuration
      - `get_logger(name)`: Returns logger instance for a module
      - `sanitize_for_logging(data, max_length)`: Truncates long strings for safe logging
      - `sanitize_command(command)`: Sanitizes command lists before logging
@@ -171,10 +171,6 @@ python -m taskwarriormcp.server
 
 # Docker-based TaskWarrior
 export TASK_COMMAND="docker compose -f docker/docker-compose.yml run --rm taskwarrior"
-python -m taskwarriormcp.server
-
-# With custom log level
-export LOG_LEVEL="DEBUG"
 python -m taskwarriormcp.server
 
 # With SSE transport (keeps server running on port 8000)
