@@ -1,6 +1,7 @@
 """Logging configuration for TaskWarrior MCP server."""
 
 import logging
+import logging.config
 import os
 import sys
 from typing import Any
@@ -47,21 +48,71 @@ def setup_logging() -> None:
 
     Reads LOG_LEVEL from environment variable (default: INFO).
     Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+    Uses dictConfig to ensure consistent formatting across all loggers,
+    including third-party libraries like Uvicorn.
     """
     # Get log level from environment
     log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
 
-    # Validate and convert to logging level
-    log_level = getattr(logging, log_level_name, logging.INFO)
+    # Define consistent format
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
 
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stderr,
-        force=True  # Override any existing configuration
-    )
+    # Use dictConfig for comprehensive logging configuration
+    # This ensures uvicorn and other libraries use our format
+    logging_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": log_format,
+                "datefmt": date_format,
+            },
+        },
+        "handlers": {
+            "default": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+                "stream": "ext://sys.stderr",
+            },
+        },
+        "root": {
+            "level": log_level_name,
+            "handlers": ["default"],
+        },
+        "loggers": {
+            # Configure uvicorn loggers to use our format
+            "uvicorn": {
+                "level": log_level_name,
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            "uvicorn.error": {
+                "level": log_level_name,
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "level": log_level_name,
+                "handlers": ["default"],
+                "propagate": False,
+            },
+        },
+    }
+
+    logging.config.dictConfig(logging_config)
+
+    # Override uvicorn's default logging config to prevent it from
+    # reconfiguring loggers when the server starts
+    try:
+        import uvicorn.config
+        uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["fmt"] = log_format
+        uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["datefmt"] = date_format
+        uvicorn.config.LOGGING_CONFIG["formatters"]["access"]["fmt"] = log_format
+        uvicorn.config.LOGGING_CONFIG["formatters"]["access"]["datefmt"] = date_format
+    except (ImportError, KeyError):
+        pass  # uvicorn not installed or config structure changed
 
     # Log the configured level
     logger = logging.getLogger(__name__)
