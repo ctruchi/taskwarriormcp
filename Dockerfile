@@ -33,7 +33,13 @@ ENV PYTHONUNBUFFERED=1 \
     TASKRC=/config/.taskrc \
     TASKDATA=/data/taskwarrior \
     TASK_COMMAND=task \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    MCP_TRANSPORT=sse \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=8000
+
+# Expose port for SSE transport
+EXPOSE 8000
 
 # Switch to non-root user
 USER taskuser

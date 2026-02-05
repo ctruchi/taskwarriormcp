@@ -23,6 +23,7 @@ cp /path/to/your/gcp-key.json credentials/gcp-credentials.json
 # 5. Run the container
 docker run -d \
   --name taskwarrior-mcp \
+  -p 8000:8000 \
   -e SYNC_GCP_BUCKET=your-bucket-name \
   -e SYNC_GCP_CREDENTIAL_PATH=/credentials/gcp-credentials.json \
   -v taskwarrior-data:/data/taskwarrior \
@@ -99,6 +100,19 @@ deploy:
 | `TASKRC` | `/config/.taskrc` | TaskWarrior config file path |
 | `TASKDATA` | `/data/taskwarrior` | TaskWarrior data directory |
 | `TASK_COMMAND` | `task` | TaskWarrior command to execute |
+| `MCP_TRANSPORT` | `sse` | MCP transport protocol: `stdio`, `sse`, or `streamable-http` |
+| `MCP_HOST` | `0.0.0.0` | Host address to bind to (use `0.0.0.0` for Docker) |
+| `MCP_PORT` | `8000` | Port number for SSE/HTTP transport |
+
+### Transport Modes
+
+The MCP server supports three transport modes:
+
+- **`stdio`**: Standard input/output communication (default for local development)
+- **`sse`**: Server-Sent Events over HTTP (default for Docker, listens on port 8000)
+- **`streamable-http`**: HTTP transport
+
+For Docker deployments, `sse` is the default as it keeps the server running and listening for connections. The server listens on port 8000.
 
 ### Volume Mounts
 
@@ -150,6 +164,7 @@ docker build --platform linux/amd64 -t taskwarrior-mcp:latest .
 ```bash
 docker run -d \
   --name taskwarrior-mcp \
+  -p 8000:8000 \
   -e SYNC_GCP_BUCKET=my-bucket \
   -e SYNC_GCP_CREDENTIAL_PATH=/credentials/gcp-credentials.json \
   -e LOG_LEVEL=INFO \
@@ -163,6 +178,8 @@ docker run -d \
   --cpus=1.0 \
   taskwarrior-mcp:latest
 ```
+
+The server will listen on port 8000 for MCP connections via SSE transport.
 
 ## Health Checks
 
@@ -224,6 +241,10 @@ docker logs taskwarrior-mcp
 
 # Verify configuration
 docker exec taskwarrior-mcp cat /config/.taskrc
+
+# Ensure MCP_TRANSPORT is set to 'sse' (default in Docker)
+# The stdio transport exits immediately without input
+docker run -e MCP_TRANSPORT=sse ...
 ```
 
 **Issue**: Permission denied
@@ -319,6 +340,9 @@ spec:
       containers:
       - name: mcp-server
         image: taskwarrior-mcp:latest
+        ports:
+        - containerPort: 8000
+          name: mcp
         env:
         - name: SYNC_GCP_BUCKET
           valueFrom:
@@ -327,6 +351,8 @@ spec:
               key: gcp-bucket
         - name: LOG_LEVEL
           value: "INFO"
+        - name: MCP_TRANSPORT
+          value: "sse"
         volumeMounts:
         - name: taskwarrior-data
           mountPath: /data/taskwarrior

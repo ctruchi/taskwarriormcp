@@ -63,6 +63,13 @@ The codebase consists of the following key components:
    - Environment variables:
      - `TASK_COMMAND` (default: "task"): TaskWarrior command to execute
      - `LOG_LEVEL` (default: "INFO"): Logging verbosity level
+     - `MCP_TRANSPORT` (default: "stdio"): Transport protocol - `stdio`, `sse`, or `streamable-http`
+     - `MCP_HOST` (default: "127.0.0.1"): Host address to bind to (use "0.0.0.0" for Docker)
+     - `MCP_PORT` (default: "8000"): Port number for SSE/HTTP transport
+   - Transport modes:
+     - `stdio`: Standard input/output (default for local development)
+     - `sse`: Server-Sent Events over HTTP (default for Docker, listens on port 8000)
+     - `streamable-http`: HTTP transport
    - Supports both local TaskWarrior and Docker-based setups
 
 5. **Error Handling** (`src/taskwarriormcp/exceptions.py`)
@@ -158,7 +165,7 @@ pip install -e ".[dev]"
 # Activate virtual environment
 source venv/bin/activate
 
-# Local TaskWarrior
+# Local TaskWarrior (stdio transport for MCP clients)
 export TASK_COMMAND="task"
 python -m taskwarriormcp.server
 
@@ -168,6 +175,10 @@ python -m taskwarriormcp.server
 
 # With custom log level
 export LOG_LEVEL="DEBUG"
+python -m taskwarriormcp.server
+
+# With SSE transport (keeps server running on port 8000)
+export MCP_TRANSPORT="sse"
 python -m taskwarriormcp.server
 ```
 

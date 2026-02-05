@@ -61,12 +61,14 @@ def create_mcp_server(config: Config) -> FastMCP:
 
         return FastMCP(
             "taskwarrior",
+            host=config.host,
+            port=config.port,
             auth=auth_settings,
             auth_server_provider=oauth_provider,
         )
     else:
         logger.info("OAuth is disabled, creating server without authentication")
-        return FastMCP("taskwarrior")
+        return FastMCP("taskwarrior", host=config.host, port=config.port)
 
 
 # Initialize configuration
@@ -285,9 +287,9 @@ async def get_metrics() -> str:
 
 def main():
     """Main entry point for the MCP server."""
-    logger.info("Starting TaskWarrior MCP server")
+    logger.info(f"Starting TaskWarrior MCP server with transport: {config.transport}")
     try:
-        mcp.run()
+        mcp.run(transport=config.transport)
     except Exception as e:
         logger.critical(f"MCP server crashed: {str(e)}", exc_info=True)
         raise
